@@ -29,6 +29,10 @@ pub mod registro {
 
         let registro = &mut context.accounts.registro;
 
+        // [APORTE PROPIO] Limite de capacidad: la cuenta Registro guarda maximo 10 clientes
+        // (#[max_len(10)]). Sin esta regla el fallo seria un error de serializacion poco claro.
+        require!(registro.clientes.len() < 10, Errores::RegistroLleno);
+
         // El id no es un argumento: lo asigna el programa. El contexto ya derivo la cuenta a
         // partir de este mismo valor, asi que aqui solo se confirma en el estado.
         let id_cliente = registro.id_counter + 1;
@@ -57,6 +61,15 @@ pub mod registro {
         descripcion: String,
         monto: u32,
     ) -> Result<()> {
+        // [APORTE PROPIO] Validaciones de negocio, aplicadas en Rust (no solo en el frontend)
+        require!(monto > 0, Errores::MontoInvalido); // Una venta de $0 no tiene sentido
+        require!(!sku.is_empty() && sku.len() <= 5, Errores::SkuInvalido); // max_len(5) de Venta
+        require!(descripcion.len() <= 50, Errores::DescripcionInvalida); // max_len(50) de Venta
+        require!(
+            context.accounts.cliente.historial.len() < 10,
+            Errores::HistorialLleno
+        ); // max_len(10) del historial del Cliente
+
         context.accounts.venta.set_inner(Venta {
             sku,
             descripcion,
@@ -115,6 +128,8 @@ pub mod registro {
         sku: String,
         nuevo_monto: u32,
     ) -> Result<()> {
+        require!(nuevo_monto > 0, Errores::MontoInvalido); // [APORTE PROPIO] Mismo criterio que al registrar
+
         let venta = &mut context.accounts.venta;
         let viejo_monto = venta.monto;
         venta.monto = nuevo_monto;
@@ -128,6 +143,40 @@ pub mod registro {
 
         Ok(())
     }
+
+    /////////////////////////// Eliminar Cliente ///////////////////////////
+    // Baja de un cliente SIN ventas activas. El contexto EliminarCliente lleva "close = owner":
+    // la cuenta del cliente se cierra al final y su rent vuelve al owner.
+    // id_counter NO se toca: los ids no se reutilizan.
+    pub fn eliminar_cliente(context: Context<EliminarCliente>, _id_cliente: u16) -> Result<()> {
+        let cliente_key = context.accounts.cliente.key(); // Se lee ANTES del &mut de registro
+        let id_cliente = context.accounts.cliente.id_cliente;
+
+        // Precondicion: sin ventas activas. Si se cerrara el cliente con historial, las PDAs de
+        // sus ventas quedarian huerfanas (nadie podria encontrarlas desde el Registro).
+        require!(
+            context.accounts.cliente.historial.is_empty() && context.accounts.cliente.compras == 0,
+            Errores::ClienteConVentas
+        );
+
+        let registro = &mut context.accounts.registro;
+
+        // Pertenencia: el cliente debe estar referenciado en el indice del registro.
+        require!(
+            registro.clientes.contains(&cliente_key),
+            Errores::ClienteNoRegistrado
+        );
+
+        registro.clientes.retain(|&k| k != cliente_key); // Retira SOLO la referencia de este cliente
+
+        msg!(
+            "Cliente con id: {} dado de baja. id_counter se conserva en: {}",
+            id_cliente,
+            registro.id_counter
+        );
+
+        Ok(())
+    }
 }
 
 /////////////////////////// Codigos de Error ///////////////////////////
@@ -137,6 +186,21 @@ pub enum Errores {
     NoOwner,
     #[msg("Error, la venta no esta en el historial del cliente")]
     NoSKU,
+    // --- Errores nuevos (agregados al final para no reordenar los existentes) ---
+    #[msg("Error, el cliente tiene ventas activas y no puede darse de baja")]
+    ClienteConVentas,
+    #[msg("Error, el cliente no esta referenciado en el registro")]
+    ClienteNoRegistrado,
+    #[msg("Error, el monto debe ser mayor a 0")]
+    MontoInvalido,
+    #[msg("Error, el sku no puede estar vacio ni exceder 5 caracteres")]
+    SkuInvalido,
+    #[msg("Error, la descripcion excede 50 caracteres")]
+    DescripcionInvalida,
+    #[msg("Error, el registro alcanzo el maximo de 10 clientes")]
+    RegistroLleno,
+    #[msg("Error, el cliente alcanzo el maximo de 10 ventas en su historial")]
+    HistorialLleno,
 }
 
 /////////////////////////// CUENTAS ///////////////////////////
@@ -331,4 +395,25 @@ pub struct EliminarVenta<'info> {
         bump
     )]
     pub venta: Account<'info, Venta>,
+}
+
+/////////////////////////// Eliminar Cliente ///////////////////////////
+/// Instruccion: eliminar_cliente -> cierra la cuenta del cliente
+
+#[derive(Accounts)]
+#[instruction(id_cliente: u16)]
+pub struct EliminarCliente<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>, // mut: recibe el rent de la cuenta cerrada
+
+    #[account(mut, has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>, // mut: se retira la referencia del cliente
+
+    #[account(
+        mut,
+        close = owner,
+        seeds = [b"cliente", registro.key().as_ref(), id_cliente.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub cliente: Account<'info, Cliente>,
 }

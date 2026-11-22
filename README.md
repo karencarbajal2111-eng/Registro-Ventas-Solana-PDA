@@ -2,61 +2,91 @@
 
 ![banner](./images/banner.jpg)
 
-CRUD básico de un Solana Program desarrollado con Rust y Anchor desde el Solana Playground. 
+**Ruta elegida:** Proyecto guiado con una mejora funcional (WayLearn · Solana Engineering Track: Advanced).
+**Versión de partida:** [WayLearnLatam/Registro-Ventas-Solana-PDA](https://github.com/WayLearnLatam/Registro-Ventas-Solana-PDA) (cierre de las sesiones 1–5).
 
-Puedes comenzar dándole Fork a este repositorio (abajo te explicamos como 👇), **hemos preparado un entorno de codespaces listo para que no tengas que instalar nada**, solo déjate llevar por la fluidez de los ejercicios y temas desarrollados especialmente para ti. 
+- **Nombre (para el certificado):** `[COMPLETAR]`
+- **Correo de registro:** `[COMPLETAR]`
+- **Program ID (Devnet):** `[COMPLETAR]` · [Ver en Solana Explorer](https://explorer.solana.com/address/PROGRAM_ID?cluster=devnet)
+- **Frontend:** `[COMPLETAR: enlace al repo/carpeta del frontend]`
 
-Asegúrate de clonar este repositorio a tu cuenta usando el botón **`Fork`**.
+## Propósito
 
-![fork](./images/fork.png)
+Programa de Solana (Rust + Anchor) para un negocio pequeño: un **Registro** del negocio, sus **Clientes** y las **Ventas** de cada cliente. Cada cuenta es una PDA derivada de su padre:
 
-## Importando el proyecto 
-
-Ya con el repositorio en tu cuenta lo siguiente que debes hacer copiar el `enlace de tu repositorio`, lo que se puede hacer directamente desdel navegador:
-
-![repo](./images/repo.png)
-
-Posteriormente, lo uniremos con el siguiente enlace en nuestro navegador de preferencia:
-
-```url
-https://beta.solpg.io/
+```
+registro <- ["registro", nombre_negocio, owner]
+cliente  <- ["cliente",  registro, id_cliente (u16 LE)]
+venta    <- ["venta",    cliente,  sku]
 ```
 
-Lo que nos dará algo parecido a:
+La pertenencia queda garantizada por las seeds y la autoridad por `has_one = owner`.
 
-![url](./images/url.png)
+## Instrucciones del programa
 
-Puedes importar directamenet el proyecto al `Solana Playground` dando clic al siguiente enlace 👇:
+| Instrucción | Qué hace |
+| --- | --- |
+| `crear_registro` | Crea el Registro del negocio. |
+| `crear_cliente` | Alta de cliente; el programa asigna el id con `id_counter`. |
+| `registrar_venta` | Crea la Venta y actualiza `historial` y `compras` del Cliente. |
+| `cambiar_monto` | Corrige el monto de una Venta existente. |
+| `hacer_devolucion` | Cierra la cuenta de la Venta (`close = owner`) y actualiza el Cliente. |
+| `eliminar_cliente` | **Baja de cliente (sesión 5).** Solo si `historial` está vacío y `compras == 0`; cierra la cuenta, retira su referencia del Registro y **no** modifica `id_counter`. |
 
-[ 🔗 Importar repositorio al Playground ](https://beta.solpg.io/https://github.com/WayLearnLatam/Registro-Ventas-Solana-PDA)
+## Aporte propio
 
-Al pulsar enter seremos enviados al `Solana Playground` con nuestro proyecto abierto:
+Sobre la base guiada (que ya incluye la baja de cliente) añadí **validaciones de negocio en Rust**, cada una con su caso de rechazo probado:
 
-![pg](./images/pg.png)
+| Regla nueva | Error | Dónde |
+| --- | --- | --- |
+| El monto debe ser mayor a 0 | `MontoInvalido` | `registrar_venta`, `cambiar_monto` |
+| El SKU no puede estar vacío ni exceder 5 caracteres | `SkuInvalido` | `registrar_venta` |
+| La descripción no puede exceder 50 caracteres | `DescripcionInvalida` | `registrar_venta` |
+| Máximo 10 clientes por Registro | `RegistroLleno` | `crear_cliente` |
+| Máximo 10 ventas por Cliente | `HistorialLleno` | `registrar_venta` |
+| El cliente debe estar referenciado en el Registro | `ClienteNoRegistrado` | `eliminar_cliente` |
 
-Para guardarlo solo damos clic en el boton `import` y asignamos un nombre:
+**Qué mejora:** antes, una venta de monto 0 se aceptaba, y un SKU largo o el cliente número 11 fallaban con un error de serialización poco claro. Ahora el programa rechaza esos casos con un error específico y sin modificar ningún estado.
+**Cómo se comprueba:** pruebas `[APORTE]` de `tests/anchor.test.ts` (ver tabla de evidencias).
 
-![import](./images/import.png)
+Además corregí los ejemplos de `client/client.ts`: el SKU `"Sabritas"` (8 caracteres) excedía `max_len(5)`; ahora es `"SAB01"`.
 
-## Preparacion del entorno
+## Cómo ejecutarlo
 
-Primero conectaremos el entorno con la devnet, lo que tambien procederá a la creación de una wallet. Para eso daremos clic en donde dice **Not Conected**:
+1. Abre el proyecto en [Solana Playground](https://beta.solpg.io/https://github.com/karlacateee-blip/Registro-Ventas-Solana-PDA), conéctalo a **Devnet** y pide airdrop.
+2. **Build** → **Deploy**. Anota el Program ID.
+3. **Test** (`tests/anchor.test.ts`) para correr las pruebas automáticas.
+4. `client/client.ts`: descomenta la operación que quieras probar y pulsa **Run**.
+5. Frontend: `[COMPLETAR: pasos — instalar, importar IDL (npm run configurar:idl -- ./idl.json), npm run dev, conectar Solflare en Devnet]`.
 
-![playground1](./images/playground1.png)
+## Pruebas y evidencias (Devnet)
 
-Saldrá la siguiente ventana donde daremos en el botón **Continue**:
+Datos de la práctica: negocio `[COMPLETAR]`, clientes Ana (id 1), Luis (id 2), Marta (id 3).
 
-![wallet](./images/wallet.png)
+| Caso | Resultado esperado | Resultado observado | Transacción / error |
+| --- | --- | --- | --- |
+| Crear Registro y Clientes | Cuentas creadas y legibles | `[COMPLETAR]` | `[Explorer]` |
+| Registrar venta válida | Se crea Venta; `compras` = 1; referencia en `historial` | `[COMPLETAR]` | `[Explorer]` |
+| Corregir el importe | Cambia el monto de la misma Venta | `[COMPLETAR]` | `[Explorer]` |
+| Devolución válida | Se cierra Venta; Cliente actualizado | `[COMPLETAR]` | `[Explorer]` |
+| Baja de cliente vacío | Se cierra Cliente; referencia retirada; `id_counter` sin cambio | `[COMPLETAR]` | `[Explorer]` |
+| Siguiente alta tras la baja | Marta recibe id 3 (no reutiliza el 1) | `[COMPLETAR]` | `[Explorer]` |
+| Wallet no autorizada | Rechazo `NoOwner`; datos intactos | `[COMPLETAR]` | `[error]` |
+| Venta ajena al cliente | Rechazo `ConstraintSeeds` | `[COMPLETAR]` | `[error]` |
+| Baja con ventas activas | Rechazo `ClienteConVentas`; cuentas y referencias intactas | `[COMPLETAR]` | `[error]` |
+| **[Aporte]** Monto = 0 | Rechazo `MontoInvalido`; no se crea la cuenta | `[COMPLETAR]` | `[error]` |
+| **[Aporte]** SKU de 6 caracteres | Rechazo `SkuInvalido` | `[COMPLETAR]` | `[error]` |
 
-Como resultado se mostrará la siguiente información:
+## Estructura del repositorio
 
-![status](./images/status.png)
+```
+src/lib.rs            Programa Anchor (Rust)
+tests/anchor.test.ts  Pruebas del programa (Playground)
+client/client.ts      Cliente de TypeScript
+idl/                  IDL exportado de la versión desplegada  [COMPLETAR]
+frontend/             Aplicación con wallet                    [COMPLETAR]
+```
 
-* En verde: el estado de la conexión y el entorno al que se encuentra conectado
+## Notas de seguridad y alcance
 
-* En amarillo: la la dirección de la wallet conectada
-
-* En azul: la cantidad de tokens en la wallet
-
-> ℹ️ ¿Quieres ver el ejemplo de un "Hola Mundo" en Solana?. Da clic aquí: 👉 [Ver Ejemplo](https://github.com/WayLearnLatam/Solana-starter-kit/tree/1fc6349ba63375a3fe223d8d56911bc64765459b/build-deploy)
-
+Proyecto educativo en Devnet. No incluye claves ni secretos. Antes de un uso real faltaría revisar límites de almacenamiento, gestión de autoridades del programa y reintentos de transacciones.

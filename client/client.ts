@@ -201,6 +201,25 @@ async function cambiarMonto(nombre_negocio, id_cliente, sku, nuevo_monto) {
   console.log("txHash: ", txHash);
 }
 
+//////////////////// Eliminar Cliente ////////////////////
+// Baja de un cliente SIN ventas activas. El programa rechaza (ClienteConVentas) si historial no
+// esta vacio o compras != 0. Cierra la cuenta del cliente, retira su referencia del registro y
+// NO modifica id_counter. No necesita sku.
+async function eliminarCliente(nombre_negocio, id_cliente) {
+  const { registro, cliente } = cadena(nombre_negocio, id_cliente, "");
+
+  const txHash = await pg.program.methods
+    .eliminarCliente(id_cliente) // eliminar_cliente -> camelCase en el IDL
+    .accounts({
+      owner: owner,
+      registro: registro,
+      cliente: cliente,
+    })
+    .rpc();
+
+  console.log("txHash: ", txHash);
+}
+
 //////////////////// Ver Clientes ////////////////////
 /*
 Cada cliente y cada venta son cuentas independientes: el registro no guarda sus datos, guarda sus
@@ -281,10 +300,11 @@ async function clienteNuevoConVenta(
 }
 
 crearRegistro(nombre_negocio);
-// clienteNuevoConVenta(nombre_negocio, "Isaac K", "Sabritas", "No puedes comer solo una", 30);
-// registrarVenta(nombre_negocio, 1, "Coca", "Coca de sabor pineapple", 18);
-// cambiarMonto(nombre_negocio, 1, "Sabritas", 32);
+// clienteNuevoConVenta(nombre_negocio, "Isaac K", "SAB01", "No puedes comer solo una", 30);
+// registrarVenta(nombre_negocio, 1, "Coca", "Coca de sabor pineapple", 18); // sku: max 5 caracteres, monto > 0
+// cambiarMonto(nombre_negocio, 1, "SAB01", 32);
 // hacerDevolucion(nombre_negocio, 1, "Coca");
+// eliminarCliente(nombre_negocio, 1); // Solo funciona si el cliente ya no tiene ventas
 // verClientes(nombre_negocio);
 
 // solana confirm -v <txHash>
